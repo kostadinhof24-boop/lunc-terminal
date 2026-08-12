@@ -1,0 +1,101 @@
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
+import { TERRA_CLASSIC_CONFIG } from '@/config/chains';
+import { useStaking } from '@/features/staking/hooks/useStaking';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { Loader, PieChart as PieIcon } from 'lucide-react';
+import { useLanguageStore } from '@/store/languageStore';
+import { useTranslation } from '@/lib/translations';
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
+
+export default function AnalyticsPanel() {
+  const { validators } = useStaking();
+  const lang = useLanguageStore((state) => state.lang);
+  const t = useTranslation(lang);
+  
+  const { data: supplyData, isLoading: isLoadingSupply } = useQuery({
+    queryKey: ['luncSupplyPanel'],
+    queryFn: async () => {
+      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/bank/v1beta1/supply/by_denom?denom=uluna`);
+      return parseFloat(res.data.amount.amount) / 1_000_000;
+    }
+  });
+
+  const { data: stakedData } = useQuery({
+    queryKey: ['luncStakedPanel'],
+    queryFn: async () => {
+      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/staking/v1beta1/pool`);
+      return parseFloat(res.data.pool.bonded_tokens) / 1_000_000;
+    }
+  });
+
+  const { data: communityPoolData } = useQuery({
+    queryKey: ['luncPoolPanel'],
+    queryFn: async () => {
+      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/distribution/v1beta1/community_pool`);
+      const pool = res.data.pool.find((p) => p.denom === 'uluna');
+      return parseFloat(pool.amount) / 1_000_000;
+    }
+  });
+
+  const topValidators = [...validators].sort((a, b) => parseFloat(b.tokens) - parseFloat(a.tokens)).slice(0, 5);
+  const otherPower = validators.slice(5).reduce((sum, v) => sum + parseFloat(v.tokens), 0);
+  const validatorData = [
+    ...topValidators.map(v => ({ name: v.description.moniker.substring(0, 15), value: parseFloat(v.tokens) / 1_000_000 })),
+    { name: 'Others', value: otherPower / 1_000_000 }
+  ];
+
+  const circulating = (supplyData || 0) - (stakedData || 0) - (communityPoolData || 0);
+  const tokenomicsData = [
+    { name: 'Circulating', value: circulating > 0 ? circulating / 1_000_000_000 : 0 },
+    { name: 'Staked', value: (stakedData || 0) / 1_000_000_000 },
+    { name: 'Comm. Pool', value: (communityPoolData || 0) / 1_000_000_000 }
+  ];
+
+  return (
+    <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8'>
+      <div className='glass-card rounded-3xl p-8'>
+        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-galaxy-blue' /> {t.analytics.votingPower}</h3>
+        {validators.length === 0 ? (
+          <div className='flex justify-center py-12'><Loader className='w-8 h-8 animate-spin text-galaxy-blue' /></div>
+        ) : (
+          <div className='h-64 w-full'>
+            <ResponsiveContainer width='100%' height='100%'>
+              <PieChart>
+                <Pie data={validatorData} dataKey='value' nameKey='name' cx='50%' cy='50%' outerRadius={80} innerRadius={40} minAngle={5} label>
+                  {validatorData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#0B1022', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+      <div className='glass-card rounded-3xl p-8'>
+        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-terra-yellow' /> {t.analytics.tokenomics}</h3>
+        {isLoadingSupply ? (
+          <div className='flex justify-center py-12'><Loader className='w-8 h-8 animate-spin text-terra-yellow' /></div>
+        ) : (
+          <div className='h-64 w-full'>
+            <ResponsiveContainer width='100%' height='100%'>
+              <PieChart>
+                <Pie data={tokenomicsData} dataKey='value' nameKey='name' cx='50%' cy='50%' outerRadius={80} innerRadius={40} minAngle={10} label>
+                  <Cell fill='#10B981' />
+                  <Cell fill='#3B82F6' />
+                  <Cell fill='#F59E0B' />
+                </Pie>
+                <Tooltip contentStyle={{ background: '#0B1022', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

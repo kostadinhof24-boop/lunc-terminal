@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  summary     String
+  content     String
+  imageUrl    String?
+  sourceUrl   String
+  sourceName  String
+  author      String?
+  readTime    Int
+  category    String
+  tags        String[]
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Validator {
+  id              String   @id
+  moniker         String
+  operatorAddress String   @unique
+  jailed          Boolean  @default(false)
+  status          String
+  votingPower     Decimal  @db.Decimal(30, 6)
+  commission      Decimal  @db.Decimal(10, 6)
+  uptime          Float?
+  website         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BurnHistory {
+  id            String   @id @default(cuid())
+  amount        Decimal  @db.Decimal(30, 8)
+  txHash        String   @unique
+  sourceExchange String?
+  timestamp     DateTime @default(now())
+}
+// --- LUNC TERMINAL NEWS ENGINE ---
+model NewsSource {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  url          String   @unique
+  rssUrl       String?
+  type         String
+  trustScore   Int      @default(50)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  articles     NewsArticle[]
+}
+
+model NewsArticle {
+  id             String   @id @default(cuid())
+  sourceId       String
+  source         NewsSource @relation(fields: [sourceId], references: [id])
+  url            String   @unique
+  imageUrl       String?
+  title          String
+  author         String?
+  rawContent     String?  @db.Text
+  cleanContent   String?  @db.Text
+  publishedAt    DateTime
+  fetchedAt      DateTime @default(now())
+  status         String   @default("PENDING")
+  relevanceScore Int?
+  sentiment      String?
+  summary        String?  @db.Text
+  eventId        String?
+  event          NewsEvent? @relation(fields: [eventId], references: [id])
+  isClickbait    Boolean  @default(false)
+  isSpam         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([publishedAt])
+  @@index([status])
+}
+
+model NewsEvent {
+  id             String   @id @default(cuid())
+  title          String
+  summary        String   @db.Text
+  category       String
+  avgRelevance   Int      @default(0)
+  avgTrustScore  Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  articles       NewsArticle[]
+}
+
+
