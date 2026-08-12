@@ -1,42 +1,21 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { TERRA_CLASSIC_CONFIG } from '@/config/chains';
 import { useStaking } from '@/features/staking/hooks/useStaking';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Loader, PieChart as PieIcon } from 'lucide-react';
-import { useLanguageStore } from '@/store/languageStore';
-import { useTranslation } from '@/lib/translations';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
 
 export default function AnalyticsPanel() {
   const { validators } = useStaking();
-  const lang = useLanguageStore((state) => state.lang);
-  const t = useTranslation(lang);
   
-  const { data: supplyData, isLoading: isLoadingSupply } = useQuery({
-    queryKey: ['luncSupplyPanel'],
+  // Utilisation de la route API locale pour éviter les erreurs CORS du navigateur
+  const { data: dashboardData, isLoading: isLoadingSupply } = useQuery({
+    queryKey: ['dashboardDataForPanel'],
     queryFn: async () => {
-      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/bank/v1beta1/supply/by_denom?denom=uluna`);
-      return parseFloat(res.data.amount.amount) / 1_000_000;
-    }
-  });
-
-  const { data: stakedData } = useQuery({
-    queryKey: ['luncStakedPanel'],
-    queryFn: async () => {
-      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/staking/v1beta1/pool`);
-      return parseFloat(res.data.pool.bonded_tokens) / 1_000_000;
-    }
-  });
-
-  const { data: communityPoolData } = useQuery({
-    queryKey: ['luncPoolPanel'],
-    queryFn: async () => {
-      const res = await axios.get(`${TERRA_CLASSIC_CONFIG.lcdUrl}/cosmos/distribution/v1beta1/community_pool`);
-      const pool = res.data.pool.find((p) => p.denom === 'uluna');
-      return parseFloat(pool.amount) / 1_000_000;
+      const res = await axios.get('/api/dashboard');
+      return res.data;
     }
   });
 
@@ -47,17 +26,21 @@ export default function AnalyticsPanel() {
     { name: 'Others', value: otherPower / 1_000_000 }
   ];
 
-  const circulating = (supplyData || 0) - (stakedData || 0) - (communityPoolData || 0);
+  const supplyData = dashboardData?.totalSupply || 0;
+  const stakedData = dashboardData?.staked || 0;
+  const communityPoolData = dashboardData?.communityPool || 0;
+
+  const circulating = supplyData - stakedData - communityPoolData;
   const tokenomicsData = [
     { name: 'Circulating', value: circulating > 0 ? circulating / 1_000_000_000 : 0 },
-    { name: 'Staked', value: (stakedData || 0) / 1_000_000_000 },
-    { name: 'Comm. Pool', value: (communityPoolData || 0) / 1_000_000_000 }
+    { name: 'Staked', value: stakedData / 1_000_000_000 },
+    { name: 'Comm. Pool', value: communityPoolData / 1_000_000_000 }
   ];
 
   return (
     <div className='grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8'>
       <div className='glass-card rounded-3xl p-8'>
-        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-galaxy-blue' /> {t.analytics.votingPower}</h3>
+        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-galaxy-blue' /> Voting Power Distribution</h3>
         {validators.length === 0 ? (
           <div className='flex justify-center py-12'><Loader className='w-8 h-8 animate-spin text-galaxy-blue' /></div>
         ) : (
@@ -77,7 +60,7 @@ export default function AnalyticsPanel() {
         )}
       </div>
       <div className='glass-card rounded-3xl p-8'>
-        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-terra-yellow' /> {t.analytics.tokenomics}</h3>
+        <h3 className='text-xl font-bold mb-6 flex items-center gap-3'><PieIcon className='w-6 h-6 text-terra-yellow' /> LUNC Tokenomics (in Billions)</h3>
         {isLoadingSupply ? (
           <div className='flex justify-center py-12'><Loader className='w-8 h-8 animate-spin text-terra-yellow' /></div>
         ) : (
